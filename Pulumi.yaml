@@ -1,0 +1,9 @@
+name: awslakeformation-iac
+runtime:
+  name: python
+  options:
+    toolchain: pip
+    virtualenv: .venv
+description: AWS Lake Formation IaC with Pulumi
+config:
+  aws:region: us-west-2
