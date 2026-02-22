@@ -1,0 +1,2 @@
+Hello from awslakeformation-iac!
+This is a test file to verify the GitHub push workflow.
