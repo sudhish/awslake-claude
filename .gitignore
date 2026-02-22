@@ -1,4 +1,24 @@
-.venv/
-__pycache__/
-*.pyc
+# Terraform
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+*.tfplan
+*.tfplan.json
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Sensitive variable files
+terraform.tfvars
+*.auto.tfvars
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Claude
 .claude/
