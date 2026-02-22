@@ -51,6 +51,27 @@ terraform plan
 terraform apply
 ```
 
+### CRITICAL: Revoke IAMAllowedPrincipals after apply
+
+After `terraform apply`, run these two commands or **Lake Formation RBAC will not be enforced**:
+
+```bash
+DB=$(terraform output -raw glue_database_name)
+REGION=$(terraform output -raw aws_region)
+
+aws lakeformation revoke-permissions \
+  --principal DataLakePrincipalIdentifier=IAM_ALLOWED_PRINCIPALS \
+  --resource "{\"Database\":{\"Name\":\"${DB}\"}}" \
+  --permissions ALL --region "${REGION}"
+
+aws lakeformation revoke-permissions \
+  --principal DataLakePrincipalIdentifier=IAM_ALLOWED_PRINCIPALS \
+  --resource "{\"Table\":{\"DatabaseName\":\"${DB}\",\"Name\":\"sales_data\"}}" \
+  --permissions ALL --region "${REGION}"
+```
+
+This revokes the default "Super" grant that AWS Glue automatically assigns to `IAM_ALLOWED_PRINCIPALS` when new databases and tables are created. Without this step, row and column filters will be bypassed entirely.
+
 Terraform will output the resource names and role ARNs needed for testing. Note these values or retrieve them later with:
 
 ```bash
@@ -144,9 +165,9 @@ bash scripts/query_as_role.sh \
 
 | Role | Countries Visible | `email` Column Visible | Row Count (full table) | Notes |
 |---|---|---|---|---|
-| `analyst-us` | **US only** | No | ~18 rows (US records in sample) | Row filter: `country = 'US'`; column exclusion via Data Cells Filter |
+| `analyst-us` | **US only** | No | 20 rows (US records in sample) | Row filter: `country = 'US'`; column exclusion via Data Cells Filter |
 | `analyst-global` | **All** (US, UK, DE, FR, CA, AU) | No | 60 rows | No row filter; `email` excluded via explicit column list grant |
-| `data-steward` | **All** | **Yes** | 60 rows | Full access; column wildcard grant in Lake Formation |
+| `data-steward` | **All** | **Yes** | 60 rows | Full access; Lake Formation `table` block grant (all rows, all columns) |
 
 **Important**: If `SELECT *` is used against `analyst-us` or `analyst-global`, the `email` column will be absent from the result set entirely — it will not appear as NULL. Lake Formation removes it from the schema visible to those roles.
 
@@ -310,12 +331,39 @@ export AWS_DEFAULT_REGION=$(terraform output -raw aws_region)
 
 **Symptom**: Running as `analyst-us` returns rows for countries other than US.
 
-**Cause**: Lake Formation Data Cells Filter permissions may not have been applied if the `depends_on` chain was not respected during a partial apply, or if the LF admin settings were not set before the permissions were created.
+**Cause**: Either (a) Lake Formation Data Cells Filter permissions were not applied (partial apply), or (b) the `IAMAllowedPrincipals` revocation step was skipped after `terraform apply`.
 
-**Fix**:
+**Fix (a)**: Re-apply the Lake Formation resources:
 ```bash
-# Force a re-apply of the Lake Formation resources
 terraform apply -target=aws_lakeformation_data_lake_settings.main
 terraform apply -target=aws_lakeformation_data_cells_filter.us_no_email
 terraform apply -target=aws_lakeformation_permissions.analyst_us_table
 ```
+
+**Fix (b)**: If RBAC was working before and stopped after re-apply, the revocation step must be re-run:
+```bash
+DB=$(terraform output -raw glue_database_name)
+REGION=$(terraform output -raw aws_region)
+aws lakeformation revoke-permissions \
+  --principal DataLakePrincipalIdentifier=IAM_ALLOWED_PRINCIPALS \
+  --resource "{\"Table\":{\"DatabaseName\":\"${DB}\",\"Name\":\"sales_data\"}}" \
+  --permissions ALL --region "${REGION}"
+```
+
+---
+
+## Console Testing via lfuser-* IAM Users
+
+`test_users.tf` creates direct IAM policies and Lake Formation permissions for three pre-existing IAM users, enabling console-based testing without Switch Role:
+
+| IAM User | Access Level | Workgroup |
+|---|---|---|
+| `lfuser-us-analyst` | US rows only, no email column | `awslake-claude-workgroup` |
+| `lfuser-global-analyst` | All rows, no email column | `awslake-claude-workgroup` |
+| `lfuser-data-steward` | All rows, all columns including email | `awslake-claude-workgroup` |
+
+**Requirements**:
+- The IAM users must be created manually before `terraform apply` (see Deployment Steps prerequisite)
+- Use the `awslake-claude-workgroup` workgroup in the Athena console, **not** the default `primary` workgroup
+- Set your console region to `us-west-2` (or your configured `aws_region`)
+- If your account password policy has `AllowUsersToChangePassword=false`, avoid creating login profiles with `--password-reset-required`

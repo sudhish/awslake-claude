@@ -12,7 +12,7 @@ AWS Lake Formation RBAC POC — Terraform IaC for testing row-level and column-l
 
 | Role | Countries Visible | Email Column | Row Count |
 |------|-----------------|--------------|-----------|
-| `analyst-us` | US only | No | 22 / 60 |
+| `analyst-us` | US only | No | 20 / 60 |
 | `analyst-global` | All (US, UK, DE, FR, CA, AU) | No | 60 / 60 |
 | `data-steward` | All | **Yes** | 60 / 60 |
 
@@ -30,6 +30,13 @@ S3 (data lake)
 
 ## Quick Start
 
+> **Prerequisite (console testing)**: If you plan to test via the AWS Console using `lfuser-*` IAM users, create those users in IAM first (they must exist before `terraform apply`, since `test_users.tf` manages their policies but not the users themselves):
+> ```bash
+> aws iam create-user --user-name lfuser-us-analyst
+> aws iam create-user --user-name lfuser-global-analyst
+> aws iam create-user --user-name lfuser-data-steward
+> ```
+
 ```bash
 # 1. Configure
 cp terraform.tfvars.example terraform.tfvars
@@ -39,10 +46,22 @@ terraform init
 terraform plan -out=tfplan
 terraform apply tfplan
 
-# 3. Load test data (60 rows, 6 countries)
+# 3. CRITICAL — revoke IAMAllowedPrincipals to enable Lake Formation RBAC
+# Without this step, Lake Formation row/column filters are NOT enforced.
+DB=awslake_catalog  # or your glue_db_name variable value
+aws lakeformation revoke-permissions \
+  --principal DataLakePrincipalIdentifier=IAM_ALLOWED_PRINCIPALS \
+  --resource "{\"Database\":{\"Name\":\"${DB}\"}}" \
+  --permissions ALL --region us-west-2
+aws lakeformation revoke-permissions \
+  --principal DataLakePrincipalIdentifier=IAM_ALLOWED_PRINCIPALS \
+  --resource "{\"Table\":{\"DatabaseName\":\"${DB}\",\"Name\":\"sales_data\"}}" \
+  --permissions ALL --region us-west-2
+
+# 4. Load test data (60 rows, 6 countries)
 bash scripts/upload_data.sh
 
-# 4. Run RBAC tests
+# 5. Run RBAC tests
 bash tests/test_rbac.sh
 ```
 
@@ -58,6 +77,7 @@ awslake-claude/
 ├── lakeformation.tf        # LF settings, resource registration, data cells filter, permissions
 ├── athena.tf               # Athena workgroup
 ├── outputs.tf              # All resource outputs
+├── test_users.tf           # IAM policies + LF permissions for lfuser-* console test users
 ├── terraform.tfvars.example
 ├── data/
 │   └── sample_sales.csv    # 60-row test dataset (id, name, email, country, revenue, product, sale_date, region)

@@ -130,7 +130,15 @@ Terraform has been successfully initialized!
 terraform plan -out=tfplan
 ```
 
-Review the output. Expect approximately **20+ resources** to be created across S3, Glue, IAM, Lake Formation, and Athena. No resources should be modified or destroyed on a clean first deploy.
+Review the output. Expect approximately **30+ resources** to be created across S3, Glue, IAM, Lake Formation, and Athena (includes 3 IAM user policies and 6 LF permissions from `test_users.tf`). No resources should be modified or destroyed on a clean first deploy.
+
+> **Prerequisite for `test_users.tf`**: `test_users.tf` manages policies for `lfuser-us-analyst`, `lfuser-global-analyst`, and `lfuser-data-steward` IAM users, but does **not** create the users themselves. Create them before running `terraform apply`:
+> ```bash
+> aws iam create-user --user-name lfuser-us-analyst
+> aws iam create-user --user-name lfuser-global-analyst
+> aws iam create-user --user-name lfuser-data-steward
+> ```
+> If these users do not exist, `terraform apply` will fail on the `aws_iam_user_policy` resources.
 
 ### 2. Apply
 
@@ -162,6 +170,35 @@ lf_service_role_arn                    = "arn:aws:iam::123456789012:role/awslake
 ```
 
 Save these values or retrieve them at any time with `terraform output`.
+
+### 3. CRITICAL — Revoke IAMAllowedPrincipals
+
+> **This step is mandatory.** Without it, Lake Formation row and column filters are **not enforced**. Any IAM principal with basic Glue and S3 access can bypass Lake Formation permissions entirely.
+
+After `terraform apply` completes, AWS Glue automatically grants `IAM_ALLOWED_PRINCIPALS` (a wildcard that matches any IAM principal with Glue access) the `ALL` permission on newly created databases and tables. This overrides all Lake Formation RBAC until revoked.
+
+Run these two commands to make Lake Formation the sole access control plane:
+
+```bash
+DB=$(terraform output -raw glue_database_name)
+REGION=$(terraform output -raw aws_region)
+
+# Revoke IAMAllowedPrincipals from the Glue database
+aws lakeformation revoke-permissions \
+  --principal DataLakePrincipalIdentifier=IAM_ALLOWED_PRINCIPALS \
+  --resource "{\"Database\":{\"Name\":\"${DB}\"}}" \
+  --permissions ALL \
+  --region "${REGION}"
+
+# Revoke IAMAllowedPrincipals from the sales_data table
+aws lakeformation revoke-permissions \
+  --principal DataLakePrincipalIdentifier=IAM_ALLOWED_PRINCIPALS \
+  --resource "{\"Table\":{\"DatabaseName\":\"${DB}\",\"Name\":\"sales_data\"}}" \
+  --permissions ALL \
+  --region "${REGION}"
+```
+
+After this step, only the explicit Lake Formation permissions granted by `lakeformation.tf` and `test_users.tf` control who can see what data.
 
 ---
 
@@ -253,6 +290,13 @@ Type `yes` when prompted.
 > **Important**: Both S3 buckets are created with `force_destroy = true`. This means `terraform destroy` will **delete the buckets and all their contents** — including any uploaded CSV data and all stored Athena query results — without requiring manual object deletion first. There is no recovery from this action.
 
 Resources destroyed include all S3 buckets, Glue catalog entries, IAM roles and policies, Lake Formation settings and permissions, and the Athena workgroup.
+
+> **Note on `lfuser-*` IAM users**: `terraform destroy` removes the IAM user *policies* and Lake Formation *permissions* created by `test_users.tf`, but it does **not** delete the `lfuser-us-analyst`, `lfuser-global-analyst`, and `lfuser-data-steward` IAM users themselves (they were created outside Terraform). Delete them manually when no longer needed:
+> ```bash
+> aws iam delete-login-profile --user-name lfuser-us-analyst 2>/dev/null; aws iam delete-user --user-name lfuser-us-analyst
+> aws iam delete-login-profile --user-name lfuser-global-analyst 2>/dev/null; aws iam delete-user --user-name lfuser-global-analyst
+> aws iam delete-login-profile --user-name lfuser-data-steward 2>/dev/null; aws iam delete-user --user-name lfuser-data-steward
+> ```
 
 ---
 

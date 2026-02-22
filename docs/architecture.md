@@ -75,7 +75,9 @@ Key capabilities demonstrated:
 | LF Data Cells Filter | `us_no_email_filter` | `lakeformation.tf` | Combines row filter (`country = 'US'`) and column exclusion (`email`) into a reusable filter object |
 | LF Permissions (analyst-us) | data cells filter grant | `lakeformation.tf` | Grants `analyst-us` SELECT via the `us_no_email_filter`; enforces both RLS and CLS simultaneously |
 | LF Permissions (analyst-global) | table_with_columns grant | `lakeformation.tf` | Grants `analyst-global` SELECT on all rows but only 7 named columns (email excluded) |
-| LF Permissions (data-steward) | table_with_columns wildcard | `lakeformation.tf` | Grants `data-steward` SELECT on all rows and all columns including email |
+| LF Permissions (data-steward) | table block grant | `lakeformation.tf` | Grants `data-steward` SELECT on all rows and all columns including email (uses `table {}` block, not `table_with_columns`, to avoid unsupported column_wildcard syntax) |
+| IAM User Policies (lfuser-*) | athena-lf-access inline policy | `test_users.tf` | Grants `lfuser-us-analyst`, `lfuser-global-analyst`, `lfuser-data-steward` direct Athena/Glue/S3/LF permissions for AWS Console testing without Switch Role |
+| LF Permissions (lfuser-*) | per-user DB + table grants | `test_users.tf` | Mirrors the role-based LF permissions for each `lfuser-*` IAM user (same data cells filter / column list / table block as their role counterparts) |
 | LF DB Permissions (all roles) | DESCRIBE grant | `lakeformation.tf` | Allows all three analyst roles to introspect the Glue database metadata |
 | IAM Role: LF Service | `awslake-claude-lf-service-role` | `iam.tf` | Assumed by the Lake Formation service to read/write S3 data lake objects on behalf of queries |
 | IAM Role: analyst-us | `awslake-claude-analyst-us` | `iam.tf` | Assumable by account principals; Athena + Glue + LF GetDataAccess permissions scoped to the two S3 buckets |
@@ -124,13 +126,13 @@ The critical step is `lakeformation:GetDataAccess`. When Athena executes a query
 |---|---|---|---|---|---|
 | `analyst-us` | `awslake-claude-analyst-us` | `country = 'US'` only (via Data Cells Filter) | All columns **except** `email` | US customers: id, name, country, revenue, product, sale_date, region | Non-US rows; `email` column |
 | `analyst-global` | `awslake-claude-analyst-global` | All rows (all countries) | All columns **except** `email` (explicit 7-column list) | Every country: id, name, country, revenue, product, sale_date, region | `email` column only |
-| `data-steward` | `awslake-claude-data-steward` | All rows (all countries) | All columns including `email` (column wildcard) | Everything — full fidelity data including PII | Nothing restricted |
+| `data-steward` | `awslake-claude-data-steward` | All rows (all countries) | All columns including `email` (table block grant) | Everything — full fidelity data including PII | Nothing restricted |
 
 ### How the Restrictions are Implemented
 
 - **analyst-us**: Lake Formation `data_cells_filter` permission using the `us_no_email_filter` object. A single filter object combines both the row predicate (`country = 'US'`) and the column exclusion (`email`). This is the most expressive Lake Formation permission type.
 - **analyst-global**: Lake Formation `table_with_columns` permission with an explicit `column_names` list of 7 columns. No row filter is applied, so all rows are visible. The `email` column is simply omitted from the allowed list.
-- **data-steward**: Lake Formation `table_with_columns` permission with `column_wildcard {}` (empty wildcard = all columns). No row filter applied. Full access to the table.
+- **data-steward**: Lake Formation `table` permission (plain `table {}` block, not `table_with_columns`). No row filter applied. Full access to all columns including `email`. The `table_with_columns { column_wildcard {} }` syntax is unsupported by the AWS Terraform provider v5 — using a bare `table {}` block is the correct way to grant unrestricted column access.
 
 All three roles share an identical IAM policy — the differentiation is **entirely** in Lake Formation, not in IAM. This is the key design point the POC is demonstrating.
 
