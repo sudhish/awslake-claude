@@ -1,11 +1,8 @@
-# Copy this file to terraform.tfvars and fill in your values.
-# terraform.tfvars is gitignored — never commit real values.
-
 aws_region   = "us-west-2"
 environment  = "dev"
 project_name = "awslake-claude"
-
-# Optional: add IAM ARNs to grant Lake Formation admin access
-# data_lake_admins = ["arn:aws:iam::123456789012:user/your-user"]
-
 glue_db_name = "awslake_catalog"
+glue_table_name = "sales_data"
+
+# Add IAM ARNs to grant Lake Formation admin access alongside the deploying identity
+# data_lake_admins = ["arn:aws:iam::123456789012:user/your-iam-user"]

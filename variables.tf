@@ -27,3 +27,15 @@ variable "glue_db_name" {
   type        = string
   default     = "awslake_catalog"
 }
+
+variable "glue_table_name" {
+  description = "Name of the Glue catalog table for sales data"
+  type        = string
+  default     = "sales_data"
+}
+
+variable "tags" {
+  description = "Additional tags to apply to resources"
+  type        = map(string)
+  default     = {}
+}
