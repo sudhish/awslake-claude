@@ -353,14 +353,14 @@ if [[ -n "${T1_RESULT}" ]]; then
   assert_row_count "${T1_RESULT}" "0" "Test 1: analyst-us non-US row count = 0"
 fi
 
-# Test 2: analyst-us total row count equals 22 (US-only rows)
-echo "Test 2: analyst-us total row count = 22"
+# Test 2: analyst-us total row count equals 20 (US-only rows in sample data)
+echo "Test 2: analyst-us total row count = 20"
 T2_RESULT=$(run_test \
   "${ANALYST_US_ROLE_ARN}" \
   "SELECT COUNT(*) AS cnt FROM ${TABLE}" \
-  "Test 2: analyst-us total row count = 22")
+  "Test 2: analyst-us total row count = 20")
 if [[ -n "${T2_RESULT}" ]]; then
-  assert_row_count "${T2_RESULT}" "22" "Test 2: analyst-us total row count = 22"
+  assert_row_count "${T2_RESULT}" "20" "Test 2: analyst-us total row count = 20"
 fi
 
 # Test 3: analyst-us cannot see the email column

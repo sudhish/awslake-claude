@@ -28,13 +28,37 @@ resource "aws_glue_catalog_table" "sales_data" {
       }
     }
 
-    columns { name = "id";        type = "int"    }
-    columns { name = "name";      type = "string" }
-    columns { name = "email";     type = "string" }
-    columns { name = "country";   type = "string" }
-    columns { name = "revenue";   type = "double" }
-    columns { name = "product";   type = "string" }
-    columns { name = "sale_date"; type = "string" }
-    columns { name = "region";    type = "string" }
+    columns {
+      name = "id"
+      type = "int"
+    }
+    columns {
+      name = "name"
+      type = "string"
+    }
+    columns {
+      name = "email"
+      type = "string"
+    }
+    columns {
+      name = "country"
+      type = "string"
+    }
+    columns {
+      name = "revenue"
+      type = "double"
+    }
+    columns {
+      name = "product"
+      type = "string"
+    }
+    columns {
+      name = "sale_date"
+      type = "string"
+    }
+    columns {
+      name = "region"
+      type = "string"
+    }
   }
 }

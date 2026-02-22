@@ -40,6 +40,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
     id     = "expire-objects-90-days"
     status = "Enabled"
 
+    filter {}
+
     expiration {
       days = 90
     }
@@ -79,6 +81,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "athena_results" {
   rule {
     id     = "expire-results-30-days"
     status = "Enabled"
+
+    filter {}
 
     expiration {
       days = 30

@@ -1,4 +1,12 @@
 # Data lake settings — register current caller + any extra admins
+# NOTE: After first apply, manually revoke IAMAllowedPrincipals from the Glue
+# database and table so Lake Formation is the sole access control plane:
+#   aws lakeformation revoke-permissions \
+#     --principal DataLakePrincipalIdentifier=IAM_ALLOWED_PRINCIPALS \
+#     --resource '{"Database":{"Name":"awslake_catalog"}}' --permissions ALL
+#   aws lakeformation revoke-permissions \
+#     --principal DataLakePrincipalIdentifier=IAM_ALLOWED_PRINCIPALS \
+#     --resource '{"Table":{"DatabaseName":"awslake_catalog","Name":"sales_data"}}' --permissions ALL
 resource "aws_lakeformation_data_lake_settings" "main" {
   admins = concat(
     [data.aws_caller_identity.current.arn],
@@ -87,14 +95,14 @@ resource "aws_lakeformation_permissions" "analyst_global_table" {
 }
 
 # ---- data-steward: SELECT on all rows, ALL columns including email ----
+# Use `table` (not table_with_columns) to grant access to all columns without restriction
 resource "aws_lakeformation_permissions" "data_steward_table" {
   principal   = aws_iam_role.data_steward.arn
   permissions = ["SELECT"]
 
-  table_with_columns {
+  table {
     database_name = aws_glue_catalog_database.main.name
     name          = aws_glue_catalog_table.sales_data.name
-    column_wildcard {}
   }
 
   depends_on = [aws_lakeformation_data_lake_settings.main]
